@@ -12,6 +12,8 @@ type CoursesProps = {
 	cartNotice?: string | null
 	term: string
 	onTermChange: (term: string) => void
+	loadAllCourses: boolean
+	onToggleLoadAll: () => void
 	isLoadingCourses: boolean
 	coursesError?: string | null
 }
@@ -86,6 +88,15 @@ const SeatTrendChart = () => {
 	)
 }
 
+type CourseDetails = {
+	credits?: number
+	course_quality?: number
+	instructor_quality?: number
+	difficulty?: number
+	work_required?: number
+	sections?: number
+}
+
 const Courses = ({
 	courses,
 	cartIds,
@@ -97,6 +108,8 @@ const Courses = ({
 	cartNotice,
 	term,
 	onTermChange,
+	loadAllCourses,
+	onToggleLoadAll,
 	isLoadingCourses,
 	coursesError,
 }: CoursesProps) => {
@@ -106,6 +119,8 @@ const Courses = ({
 	const [activeCourse, setActiveCourse] = useState<Course | null>(null)
 	const [isScheduleOpen, setIsScheduleOpen] = useState(false)
 	const [page, setPage] = useState(1)
+	const [detailsById, setDetailsById] = useState<Record<string, CourseDetails>>({})
+	const [detailsStatus, setDetailsStatus] = useState<"idle" | "loading" | "error">("idle")
 	const pageSize = 24
 
 	const filteredCourses = useMemo(() => {
@@ -158,6 +173,30 @@ const Courses = ({
 
 	const handleOpenDetails = (course: Course) => {
 		setActiveCourse(course)
+		const courseId = getCourseId(course)
+		if (detailsById[courseId]) return
+		setDetailsStatus("loading")
+		fetch(`/api/base/${term}/courses/${courseId}/`)
+			.then((res) => {
+				if (!res.ok) throw new Error("Failed to load course details.")
+				return res.json()
+			})
+			.then((data) => {
+				setDetailsById((prev) => ({
+					...prev,
+					[courseId]: {
+						credits: typeof data.credits === "number" ? data.credits : undefined,
+						course_quality: typeof data.course_quality === "number" ? data.course_quality : undefined,
+						instructor_quality:
+							typeof data.instructor_quality === "number" ? data.instructor_quality : undefined,
+						difficulty: typeof data.difficulty === "number" ? data.difficulty : undefined,
+						work_required: typeof data.work_required === "number" ? data.work_required : undefined,
+						sections: Array.isArray(data.sections) ? data.sections.length : undefined,
+					},
+				}))
+				setDetailsStatus("idle")
+			})
+			.catch(() => setDetailsStatus("error"))
 	}
 
 	const handleCloseDetails = () => {
@@ -227,7 +266,6 @@ const Courses = ({
 					<p className="filters__caption">Cart limit: {cartCount}/{cartLimit}</p>
 				</div>
 				<div className="filters__section">
-					<p className="filters__title">Course catalog</p>
 					<label className="input">
 						<span>Term</span>
 						<input
@@ -237,13 +275,10 @@ const Courses = ({
 							onChange={(event) => onTermChange(event.target.value)}
 						/>
 					</label>
-					{isLoadingCourses ? (
-						<p className="filters__caption">Loading PennCoursePlan courses...</p>
-					) : (
-						<p className="filters__caption">
-							Browsing {courses.length} courses from PennCoursePlan.
-						</p>
-					)}
+					<button className="button button--ghost button--small" onClick={onToggleLoadAll}>
+						{loadAllCourses ? "Use sample list" : "Load full catalog"}
+					</button>
+					{isLoadingCourses && <p className="filters__caption">Loading full catalog...</p>}
 					{coursesError && <p className="filters__notice">{coursesError}</p>}
 				</div>
 				<div className="filters__section">
@@ -255,7 +290,7 @@ const Courses = ({
 							<>
 								<div
 									className="schedule__grid schedule__grid--compact"
-									style={{ gridTemplateRows: `24px repeat(${timeSlots.length}, 32px)` }}>
+									style={{ gridTemplateRows: `24px repeat(${timeSlots.length * 2}, 22px)` }}>
 									<div className="schedule__corner" />
 									{dayLabels.map((day, index) => (
 										<div
@@ -269,7 +304,7 @@ const Courses = ({
 										<div
 											key={time}
 											className="schedule__time"
-											style={{ gridColumn: 1, gridRow: index + 2 }}>
+											style={{ gridColumn: 1, gridRow: index * 2 + 2, gridRowEnd: "span 2" }}>
 											{time}
 										</div>
 									))}
@@ -428,6 +463,38 @@ const Courses = ({
 										<strong>Cross-listed:</strong> {activeCourse["cross-listed"]!.join(", ")}
 									</p>
 								)}
+								{detailsById[getCourseId(activeCourse)] && (
+									<div className="course-details">
+										<p>
+											<strong>Credits:</strong> {detailsById[getCourseId(activeCourse)].credits ?? "—"}
+										</p>
+										<p>
+											<strong>Sections:</strong> {detailsById[getCourseId(activeCourse)].sections ?? "—"}
+										</p>
+										<p>
+											<strong>Course quality:</strong>{" "}
+											{detailsById[getCourseId(activeCourse)].course_quality?.toFixed(2) ?? "—"}
+										</p>
+										<p>
+											<strong>Instructor quality:</strong>{" "}
+											{detailsById[getCourseId(activeCourse)].instructor_quality?.toFixed(2) ?? "—"}
+										</p>
+										<p>
+											<strong>Difficulty:</strong>{" "}
+											{detailsById[getCourseId(activeCourse)].difficulty?.toFixed(2) ?? "—"}
+										</p>
+										<p>
+											<strong>Work required:</strong>{" "}
+											{detailsById[getCourseId(activeCourse)].work_required?.toFixed(2) ?? "—"}
+										</p>
+									</div>
+								)}
+								{detailsStatus === "loading" && (
+									<p className="filters__caption">Loading PennCoursePlan details...</p>
+								)}
+								{detailsStatus === "error" && (
+									<p className="filters__notice">Unable to load extra details for this course.</p>
+								)}
 							</div>
 							<SeatTrendChart />
 						</div>
@@ -453,7 +520,9 @@ const Courses = ({
 							{cartCourses.length === 0 ? (
 								<p className="schedule__empty">Add courses to preview a schedule.</p>
 							) : (
-								<div className="schedule__grid" style={{ gridTemplateRows: `28px repeat(${timeSlots.length}, 38px)` }}>
+								<div
+									className="schedule__grid"
+									style={{ gridTemplateRows: `28px repeat(${timeSlots.length * 2}, 30px)` }}>
 									<div className="schedule__corner" />
 									{dayLabels.map((day, index) => (
 										<div
@@ -467,7 +536,7 @@ const Courses = ({
 										<div
 											key={time}
 											className="schedule__time"
-											style={{ gridColumn: 1, gridRow: index + 2 }}>
+											style={{ gridColumn: 1, gridRow: index * 2 + 2, gridRowEnd: "span 2" }}>
 											{time}
 										</div>
 									))}

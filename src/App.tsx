@@ -94,6 +94,7 @@ const AppShell = () => {
 	const [isCartOpen, setIsCartOpen] = useState(false)
 	const [cartNotice, setCartNotice] = useState<string | null>(null)
 	const [term, setTerm] = useState("2022A")
+	const [loadAllCourses, setLoadAllCourses] = useState(false)
 	const [apiCourses, setApiCourses] = useState<Course[]>([])
 	const [coursesError, setCoursesError] = useState<string | null>(null)
 	const [isLoadingCourses, setIsLoadingCourses] = useState(false)
@@ -105,12 +106,21 @@ const AppShell = () => {
 		const controller = new AbortController()
 
 		const loadCourses = async () => {
+			if (!loadAllCourses) {
+				setApiCourses([])
+				setCoursesError(null)
+				setIsLoadingCourses(false)
+				return
+			}
+
 			setIsLoadingCourses(true)
 			setCoursesError(null)
 			try {
+				const timeoutId = setTimeout(() => controller.abort(), 8000)
 				const response = await fetch(`/api/base/${term}/courses/`, {
 					signal: controller.signal,
 				})
+				clearTimeout(timeoutId)
 				if (!response.ok) {
 					throw new Error("Unable to load courses for that term.")
 				}
@@ -123,9 +133,12 @@ const AppShell = () => {
 					.filter((course): course is Course => Boolean(course))
 				setApiCourses(mapped)
 			} catch (error) {
-				if ((error as Error).name !== "AbortError") {
-					setCoursesError(error instanceof Error ? error.message : "Failed to load courses.")
-				}
+				const isAbort = (error as Error).name === "AbortError"
+				const message = isAbort
+					? "Full catalog request timed out. Use search instead."
+					: "Full catalog request failed. Use search instead."
+				setCoursesError(message)
+				setLoadAllCourses(false)
 			} finally {
 				setIsLoadingCourses(false)
 			}
@@ -134,14 +147,14 @@ const AppShell = () => {
 		loadCourses()
 
 		return () => controller.abort()
-	}, [term])
+	}, [term, loadAllCourses])
 
 	const allCourses = useMemo(() => {
-		if (apiCourses.length > 0) return mergeCourses(apiCourses, courses)
-		if (isLoadingCourses) return []
-		if (coursesError) return courses
+		if (loadAllCourses && apiCourses.length > 0) return mergeCourses(apiCourses, courses)
+		if (loadAllCourses && isLoadingCourses) return []
+		if (loadAllCourses && coursesError) return courses
 		return courses
-	}, [apiCourses, isLoadingCourses, coursesError])
+	}, [apiCourses, isLoadingCourses, coursesError, loadAllCourses])
 
 	useEffect(() => {
 		let isMounted = true
@@ -207,6 +220,16 @@ const AppShell = () => {
 		navigate(`/checkout?courses=${encodeURIComponent(query)}`)
 	}
 
+	const handleReorderCart = (fromIndex: number, toIndex: number) => {
+		if (fromIndex === toIndex) return
+		setCartIds((prev) => {
+			const next = [...prev]
+			const [moved] = next.splice(fromIndex, 1)
+			next.splice(toIndex, 0, moved)
+			return next
+		})
+	}
+
 	const isCheckoutPage = location.pathname === "/checkout"
 
 	return (
@@ -228,6 +251,8 @@ const AppShell = () => {
 								cartNotice={cartNotice}
 								term={term}
 								onTermChange={setTerm}
+				loadAllCourses={loadAllCourses}
+				onToggleLoadAll={() => setLoadAllCourses((prev) => !prev)}
 								isLoadingCourses={isLoadingCourses}
 								coursesError={coursesError}
 							/>
@@ -243,6 +268,8 @@ const AppShell = () => {
 					cartCourses={cartCourses}
 					onRemove={handleRemoveCourse}
 					onCheckout={handleCheckout}
+					onReorder={handleReorderCart}
+					shareUrl={`${window.location.origin}/checkout?courses=${encodeURIComponent(cartIds.join(","))}`}
 					cartLimit={cartLimit}
 				/>
 			)}

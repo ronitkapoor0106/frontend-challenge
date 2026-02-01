@@ -168,6 +168,7 @@ p {
 	padding: 0.5rem 0.75rem;
 }
 
+
 .input {
 	display: grid;
 	gap: 0.35rem;
@@ -461,6 +462,16 @@ p {
 	line-height: 1.5;
 }
 
+.course-details {
+	display: grid;
+	gap: 0.35rem;
+	background: #f4f6ff;
+	border-radius: 12px;
+	padding: 0.75rem;
+	font-size: 0.85rem;
+	color: #3e4560;
+}
+
 .modal__body {
 	display: grid;
 	grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
@@ -590,6 +601,11 @@ p {
 	gap: 1rem;
 }
 
+.cart__hint {
+	font-size: 0.85rem;
+	color: #6b7390;
+}
+
 .cart__item {
 	display: flex;
 	justify-content: space-between;
@@ -598,6 +614,18 @@ p {
 	border-radius: 12px;
 	background: #f1f3ff;
 	align-items: center;
+	cursor: grab;
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cart__item:active {
+	cursor: grabbing;
+}
+
+.cart__item--dragging {
+	transform: scale(0.98);
+	box-shadow: 0 12px 24px rgba(31, 36, 52, 0.18);
+	opacity: 0.9;
 }
 
 .cart__item-code {
@@ -626,6 +654,9 @@ p {
 
 .cart__footer {
 	margin-top: auto;
+	display: flex;
+	gap: 0.75rem;
+	flex-wrap: wrap;
 }
 
 .checkout {
